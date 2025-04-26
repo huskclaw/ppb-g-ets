@@ -4,12 +4,15 @@ import android.annotation.SuppressLint
 import android.content.pm.ActivityInfo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -21,7 +24,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -29,6 +31,13 @@ import androidx.compose.ui.unit.sp
 import com.example.mymoneynotes.ui.theme.MyMoneyNotesTheme
 import java.text.NumberFormat
 import java.util.Locale
+import androidx.compose.material3.BottomSheetScaffold
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberBottomSheetScaffoldState
+import androidx.compose.material3.rememberStandardBottomSheetState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
+import kotlinx.coroutines.launch
 
 // Transaction types
 enum class TransactionType { Income, Expense }
@@ -47,7 +56,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MyMoneyNotesTheme {
-                Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFE3F2FD)) {
+                Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFF363636)) {
                     Scaffold(
                         topBar = {
                             TopAppBar(
@@ -67,6 +76,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(modifier: Modifier = Modifier) {
     // Transactions state
@@ -79,27 +89,129 @@ fun MainScreen(modifier: Modifier = Modifier) {
     // Scroll state for the main content
     val scrollState = rememberScrollState()
 
-    // Use this to ensure the transaction history section is initially visible at bottom of screen
-    var chartsSectionHeight by remember { mutableIntStateOf(0) }
+    // Bottom sheet state - configuring it to not fully hide
+    val sheetState = rememberStandardBottomSheetState(
+        initialValue = SheetValue.PartiallyExpanded,
+        confirmValueChange = { sheetValue ->
+            // Prevent the sheet from completely hiding by rejecting the Hidden state
+            sheetValue != SheetValue.Hidden
+        },
+        skipHiddenState = true // Skip hidden state entirely
+    )
+    val scaffoldState = rememberBottomSheetScaffoldState(bottomSheetState = sheetState)
 
-    Box(modifier = modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
-                .verticalScroll(scrollState),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // Section that contains input and charts - measure its height
-            Column(
+
+    // Handle back presses to prevent the bottom sheet from hiding
+    val scope = rememberCoroutineScope()
+    BackHandler(enabled = sheetState.currentValue == SheetValue.Expanded) {
+        scope.launch {
+            sheetState.partialExpand()
+        }
+    }
+
+    BottomSheetScaffold(
+        scaffoldState = scaffoldState,
+        sheetSwipeEnabled = true, // Disables swipe gestures on the entire sheet
+        sheetPeekHeight = 200.dp, // Minimum visible height
+        sheetDragHandle = null,
+        sheetContent = {
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .onGloballyPositioned { coordinates ->
-                        chartsSectionHeight = coordinates.size.height
-                    },
+                    .background(MaterialTheme.colorScheme.surface)
+            ) {
+                val maxSheetHeight = this.maxHeight * 0.8f // 80% of screen height
+
+                val nestedScrollInterop = rememberNestedScrollInteropConnection()
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 200.dp, max = maxSheetHeight)
+                ) {
+                    // Header bar
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF1976D2))
+                            .padding(top = 12.dp, bottom = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // Handle bar INSIDE the blue box
+                        Box(
+                            modifier = Modifier
+                                .width(64.dp)
+                                .height(4.dp)
+                                .background(
+                                    color = Color.White.copy(alpha = 0.6f),
+                                    shape = RoundedCornerShape(2.dp)
+                                )
+                        )
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "Transaction History",
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+
+                    if (transactions.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "No transactions yet",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                                .nestedScroll(nestedScrollInterop)
+                                .padding(horizontal = 16.dp),
+                            contentPadding = PaddingValues(vertical = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            itemsIndexed(transactions.asReversed()) { index, tx ->
+                                TransactionItem(tx) {
+                                    transactions.removeAt(transactions.lastIndex - index)
+                                }
+                                if (index < transactions.size - 1) {
+                                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        containerColor = Color(0xFFE3F2FD),
+        sheetShape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        content = { innerPadding ->
+            // Main content
+            Column(
+                modifier = Modifier
+                    .padding(innerPadding)
+                    .padding(horizontal = 16.dp)
+                    .verticalScroll(scrollState),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Input card
+                Spacer(modifier = Modifier.height(75.dp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp),
@@ -198,92 +310,13 @@ fun MainScreen(modifier: Modifier = Modifier) {
                     )
                 }
 
-
+                // Spacer to ensure content doesn't get hidden behind the bottom sheet
+                Spacer(modifier = Modifier.height(56.dp))
             }
-
-            // Transaction history section with an attention-grabbing header
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth(),
-                shape = RoundedCornerShape(8.dp),
-                elevation = CardDefaults.cardElevation(4.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1976D2))
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .background(Color.White, RoundedCornerShape(12.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "↓",
-                                color = Color(0xFF1976D2),
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 20.sp,
-                                modifier = Modifier.offset(y = (-4).dp) // shift upward slightly
-                            )
-                        }
-
-                        Text(
-                            "Transaction History",
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White,
-                            modifier = Modifier.padding(horizontal = 8.dp)
-                        )
-                    }
-                }
-            }
-
-            // Transaction list
-            if (transactions.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(100.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFFE0E0E0)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("No transactions yet", color = Color.Gray)
-                }
-            } else {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 100.dp, max = 300.dp), // Scrollable inside max height
-                    shape = RoundedCornerShape(8.dp),
-                    elevation = CardDefaults.cardElevation(4.dp)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        transactions.asReversed().forEachIndexed { index, tx ->
-                            TransactionItem(tx) {
-                                transactions.removeAt(transactions.lastIndex - index) // correct index after reverse
-                            }
-                            HorizontalDivider(color = Color.LightGray)
-                        }
-                    }
-                }
-            }
-
-            // Add some space at the bottom for better scrolling experience
-            Spacer(modifier = Modifier.height(40.dp))
         }
-    }
+    )
 }
+
 
 @Composable
 fun PieChart(modifier: Modifier = Modifier, data: List<Transaction>, label: String) {
@@ -369,32 +402,38 @@ fun PieChart(modifier: Modifier = Modifier, data: List<Transaction>, label: Stri
 
 @Composable
 fun TransactionItem(tx: Transaction, onDelete: () -> Unit) {
-    val bg = if (tx.type == TransactionType.Income) Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
-    val fg = if (tx.type == TransactionType.Income) Color(0xFF388E3C) else Color(0xFFD32F2F)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(bg, RoundedCornerShape(4.dp))
-            .padding(12.dp),
+            .padding(vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column {
-            Text(tx.category)
+        Text(
+            text = tx.category,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            val amountColor = if (tx.type == TransactionType.Income)
+                Color(0xFF388E3C) else Color(0xFFD32F2F)
             Text(
                 text = "${if (tx.type == TransactionType.Income) "+" else "-"}${"%,.2f".format(tx.amount)}",
-                color = fg,
+                color = amountColor,
                 fontWeight = FontWeight.Bold
             )
+            Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = "Delete",
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier
+                    .clickable { onDelete() }
+                    .size(20.dp)
+            )
         }
-        Icon(
-            imageVector = Icons.Default.Delete,
-            contentDescription = "Delete",
-            tint = Color.Red,
-            modifier = Modifier
-                .clickable { onDelete() }
-                .size(20.dp)
-        )
     }
 }
 
