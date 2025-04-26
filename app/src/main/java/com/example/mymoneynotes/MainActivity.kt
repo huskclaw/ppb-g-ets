@@ -60,7 +60,7 @@ class MainActivity : ComponentActivity() {
                     Scaffold(
                         topBar = {
                             TopAppBar(
-                                title = { Text("MyMoney Notes", fontWeight = FontWeight.Bold) },
+                                title = { Text("BlueBalance", fontWeight = FontWeight.Bold) },
                                 colors = TopAppBarDefaults.topAppBarColors(
                                     containerColor = Color(0xFF2196F3),
                                     titleContentColor = Color.White
