@@ -120,7 +120,7 @@ fun MainScreen(modifier: Modifier = Modifier) {
                     .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.surface)
             ) {
-                val maxSheetHeight = this.maxHeight * 0.8f // 80% of screen height
+                val maxSheetHeight = this.maxHeight * 0.891f // 80% of screen height
 
                 val nestedScrollInterop = rememberNestedScrollInteropConnection()
 
@@ -199,19 +199,21 @@ fun MainScreen(modifier: Modifier = Modifier) {
                 }
             }
         },
-        containerColor = Color(0xFFE3F2FD),
+//        containerColor = Color(0xFFE3F2FD),
+//        containerColor = Color(0xFF262626),
+        containerColor = MaterialTheme.colorScheme.background,
         sheetShape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
         content = { innerPadding ->
             // Main content
             Column(
-                modifier = Modifier
+                modifier = modifier
                     .padding(innerPadding)
                     .padding(horizontal = 16.dp)
                     .verticalScroll(scrollState),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Input card
-                Spacer(modifier = Modifier.height(75.dp))
+//                Spacer(modifier = Modifier.height(75.dp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp),
@@ -428,7 +430,7 @@ fun TransactionItem(tx: Transaction, onDelete: () -> Unit) {
             Icon(
                 imageVector = Icons.Default.Delete,
                 contentDescription = "Delete",
-                tint = MaterialTheme.colorScheme.error,
+                tint = Color(0xFFD32F2F),
                 modifier = Modifier
                     .clickable { onDelete() }
                     .size(20.dp)
